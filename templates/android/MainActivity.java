@@ -15,7 +15,8 @@ import java.util.Map;
  *
  * Capacitor responde index.html a toda ruta sin extensión, lo que sirve para
  * una SPA pero no para sitios multipágina (Next, Nuxt): /acerca debe mostrar
- * acerca.html o acerca/index.html. Reescribimos esas peticiones y dejamos que
+ * acerca.html o acerca/index.html, y las rutas no prerenderizadas de Nuxt usan
+ * 200.html (su index.html es la página de inicio). Reescribimos esas peticiones y dejamos que
  * Capacitor las atienda, así sigue inyectando su puente JS.
  */
 public class MainActivity extends BridgeActivity {
@@ -41,7 +42,7 @@ public class MainActivity extends BridgeActivity {
             return null;
         }
         String base = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
-        for (String candidate : new String[] { base + ".html", base + "/index.html" }) {
+        for (String candidate : new String[] { base + ".html", base + "/index.html", "/200.html" }) {
             if (assetExists("public" + candidate)) return candidate;
         }
         return null;

@@ -28,8 +28,12 @@ function patchConfig(project: Project): void {
 ${importLine}
 const base = ${importLine ? `typeof original === 'function' ? await original() : original` : '{}'};
 
+// Módulos que solo funcionan publicados en su hosting (p.ej. Vercel Analytics).
+const hostingOnly = (m) => /^@vercel\\//.test(Array.isArray(m) ? m[0] : m);
+
 export default {
   ...base,
+  modules: (base?.modules ?? []).filter((m) => !hostingOnly(m)),
   app: { ...base?.app, baseURL: '/', cdnURL: '' },
   typescript: { ...base?.typescript, typeCheck: false },
 };

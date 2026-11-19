@@ -5,8 +5,7 @@ Convierte un proyecto web JavaScript en una app de escritorio (Electron) o móvi
 ## Uso
 
 ```bash
-npm install
-npm run build
+npm install   # también compila dist/ (script "prepare")
 
 # ¿Es compatible mi proyecto?
 node dist/cli.js analyze ../mi-proyecto
@@ -39,7 +38,7 @@ detectar → copiar a .work/source → compilar web → empaquetar
 | Create React App | ✅ | `PUBLIC_URL=/` (ignora `homepage`), advertencias de ESLint no bloquean |
 | Angular | ✅ | `angular.json`: sin SSR/prerender/budgets, `baseHref` `/` |
 | Next.js | ✅ | `next.config` envuelto: `output: 'export'`, imágenes sin optimizar, sin PPR; se quitan rutas de API y middleware |
-| Nuxt | ✅ | `nuxt.config` envuelto: `baseURL` `/`; `nuxt generate` |
+| Nuxt | ✅ | `nuxt.config` envuelto: `baseURL` `/`, sin módulos `@vercel/*`; `nuxt generate`. Las rutas no prerenderizadas usan `200.html` |
 | SvelteKit, Remix, Astro, Gatsby | Detectado, pendiente | |
 
 Next.js: el análisis marca como bloqueantes `getServerSideProps`, Server Actions, `cookies()`/`headers()` y rutas dinámicas sin `generateStaticParams`/`getStaticPaths`.

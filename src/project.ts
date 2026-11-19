@@ -41,11 +41,14 @@ const SOURCE_EXT = /\.(m?[jt]sx?|vue|svelte|astro|html)$/;
 /** Código que corre en el servidor o al compilar, nunca dentro de la app. */
 const SERVER_ONLY = /(^|[\\/])(server\.[cm]?[jt]s|[\w.-]+\.config\.[cm]?[jt]s|server[\\/].*|middleware\.[cm]?[jt]s)$/;
 const LOCAL_URL = /https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?[^\s'"`)]*/g;
+/** Inicio de sesión con proveedores externos (Supabase, Firebase, Auth.js...). */
+const OAUTH = /signInWithOAuth|signInWithPopup|signInWithRedirect|GoogleAuthProvider|signIn\(\s*['"](google|github|facebook|apple|azure)/;
 
 /** Revisiones que aplican a cualquier framework. */
 export function commonFindings(project: Project): Finding[] {
   const findings: Finding[] = [];
   const localUrls = new Map<string, string>();
+  let oauthFile: string | undefined;
 
   for (const file of walk(project.root)) {
     const name = path.basename(file);
@@ -53,6 +56,7 @@ export function commonFindings(project: Project): Finding[] {
     if (SERVER_ONLY.test(path.relative(project.root, file))) continue;
     if (fs.statSync(file).size > 1_000_000) continue;
     const text = fs.readFileSync(file, 'utf8');
+    if (!oauthFile && OAUTH.test(text)) oauthFile = path.relative(project.root, file);
     for (const match of text.matchAll(LOCAL_URL)) {
       if (!localUrls.has(match[0])) localUrls.set(match[0], path.relative(project.root, file));
     }
@@ -63,6 +67,14 @@ export function commonFindings(project: Project): Finding[] {
       level: 'warn',
       message: `Tu app se conecta a ${url} (en ${file}).`,
       hint: 'Esa dirección solo existe en tu computadora. En el celular o en otra PC no va a funcionar: usa la URL pública de tu servidor.',
+    });
+  }
+
+  if (oauthFile) {
+    findings.push({
+      level: 'warn',
+      message: `Tu app inicia sesión con un proveedor externo como Google (en ${oauthFile}).`,
+      hint: 'Dentro de la app, ese inicio de sesión no puede volver a la app sin configuración adicional. El resto de la app funcionará.',
     });
   }
   return findings;

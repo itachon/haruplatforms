@@ -9,7 +9,9 @@ const { pathToFileURL } = require('node:url');
 
 const SCHEME = 'app';
 const WEB_ROOT = path.join(__dirname, 'web');
-const INDEX = path.join(WEB_ROOT, 'index.html');
+// Nuxt genera 200.html como página genérica para rutas no prerenderizadas;
+// su index.html es la página de inicio ya renderizada.
+const SPA_FALLBACK = ['200.html', 'index.html'].map((f) => path.join(WEB_ROOT, f)).find((f) => fs.existsSync(f));
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -30,7 +32,7 @@ function resolveFile(pathname) {
     if (isFile(candidate)) return candidate;
   }
   // Si no, es una ruta del router del cliente (SPA).
-  return INDEX;
+  return SPA_FALLBACK;
 }
 
 function createWindow() {
