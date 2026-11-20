@@ -5,6 +5,7 @@ import type { AppConfig, Artifact, Platform } from '../types.js';
 import { run, q } from '../utils/exec.js';
 import { cleanDir, templatePath, writeJson } from '../utils/fs.js';
 import { log } from '../utils/log.js';
+import { canAutoSetupAndroid, ensureJava, installAndroidSdk, readCompileSdk } from '../utils/android-setup.js';
 
 export function findAndroidSdk(): string | undefined {
   const candidates = [
@@ -33,10 +34,21 @@ export async function buildCapacitor(
     version: app.version,
     private: true,
   });
+  const nativeHttp = usesCredentials(webDir);
+  if (nativeHttp) {
+    log.info('La app envía cookies a su backend: las peticiones HTTP irán por la capa nativa (sin CORS).');
+  }
   writeJson(path.join(shell, 'capacitor.config.json'), {
     appId: app.id,
     appName: app.name,
     webDir: 'web',
+    // En el WebView la app corre en https://localhost, otro sitio para el backend: el navegador
+    // bloquea la respuesta (CORS) y no manda cookies de sesión de terceros. Con CapacitorHttp el
+    // fetch/XHR a URLs absolutas sale desde Android, y CapacitorCookies guarda las cookies
+    // (incluso HttpOnly) en el almacén del WebView y las reenvía.
+    ...(nativeHttp && {
+      plugins: { CapacitorHttp: { enabled: true }, CapacitorCookies: { enabled: true } },
+    }),
   });
 
   const packages = ['@capacitor/core', '@capacitor/cli', ...platforms.map((p) => `@capacitor/${p}`)];
@@ -52,6 +64,22 @@ export async function buildCapacitor(
     artifacts.push(platform === 'android' ? await compileAndroid(shell, app, outDir) : await prepareIos(shell, outDir));
   }
   return artifacts;
+}
+
+const CREDENTIALS = /credentials\s*:\s*["'`]include["'`]|withCredentials\s*[:=]\s*(!0|true)/;
+
+/** ¿El JS compilado manda cookies a otros dominios (sesión por cookie)? */
+function usesCredentials(webDir: string): boolean {
+  const stack = [webDir];
+  while (stack.length) {
+    const dir = stack.pop()!;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (/\.(m?js|html)$/.test(entry.name) && CREDENTIALS.test(fs.readFileSync(full, 'utf8'))) return true;
+    }
+  }
+  return false;
 }
 
 /** Reemplaza la actividad generada por una que entiende sitios multipágina. */
@@ -70,7 +98,16 @@ async function generateIcons(shell: string, icon: string, platform: Platform): P
 
 async function compileAndroid(shell: string, app: AppConfig, outDir: string): Promise<Artifact> {
   const project = path.join(shell, 'android');
-  const sdk = findAndroidSdk();
+  let sdk = findAndroidSdk();
+  let javaEnv: NodeJS.ProcessEnv = {};
+  if (canAutoSetupAndroid()) {
+    try {
+      javaEnv = await ensureJava();
+      if (!sdk) sdk = await installAndroidSdk(javaEnv, readCompileSdk(project));
+    } catch (err) {
+      log.warn(`No se pudo preparar Java / Android SDK automáticamente: ${(err as Error).message}`);
+    }
+  }
   if (!sdk) {
     const dest = copyProject(shell, outDir, 'android-project');
     return {
@@ -85,7 +122,7 @@ async function compileAndroid(shell: string, app: AppConfig, outDir: string): Pr
   const gradlew = q(path.join(project, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'));
   log.info('Compilando APK con Gradle (la primera vez descarga varias dependencias)...');
   // Sin daemon: un Gradle residente bloquea la carpeta y impide recompilar.
-  await run(`${gradlew} assembleDebug --no-daemon`, project);
+  await run(`${gradlew} assembleDebug --no-daemon`, project, { ...javaEnv, ANDROID_HOME: sdk });
 
   const apk = path.join(project, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
   const dest = path.join(outDir, `${app.name}-${app.version}-android-debug.apk`);

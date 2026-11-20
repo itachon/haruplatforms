@@ -2,7 +2,7 @@
 // Sirve la app web desde el protocolo app:// en lugar de file:// para que las
 // rutas absolutas (/assets/...) y el router en modo "history" funcionen igual
 // que en un servidor web.
-const { app, BrowserWindow, protocol, net, shell } = require('electron');
+const { app, BrowserWindow, protocol, net, session, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -33,6 +33,69 @@ function resolveFile(pathname) {
   }
   // Si no, es una ruta del router del cliente (SPA).
   return SPA_FALLBACK;
+}
+
+const APP_ORIGIN = `${SCHEME}://bundle`;
+
+/** Lee o borra una cabecera sin importar mayúsculas. */
+function header(headers, name, remove = false) {
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase());
+  if (!key) return undefined;
+  const value = headers[key];
+  if (remove) delete headers[key];
+  return Array.isArray(value) ? value.join(', ') : value;
+}
+
+/**
+ * La app corre en app://bundle, que para su backend es otro sitio. Sin esto el
+ * navegador bloquea las respuestas (CORS, el backend solo conoce los dominios web)
+ * y no reenvía las cookies de sesión (SameSite). Para las peticiones que hace la
+ * propia app: se responden los encabezados CORS que permiten app://bundle con
+ * credenciales, y las cookies se guardan como SameSite=None para que viajen.
+ */
+function allowBackendRequests(ses) {
+  const pending = new Map(); // id → { methods, headers } pedidos en el preflight
+
+  ses.webRequest.onBeforeSendHeaders({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+    const h = details.requestHeaders;
+    if (header(h, 'Origin') === APP_ORIGIN) {
+      pending.set(details.id, {
+        methods: header(h, 'Access-Control-Request-Method'),
+        headers: header(h, 'Access-Control-Request-Headers'),
+      });
+    }
+    callback({ requestHeaders: h });
+  });
+
+  ses.webRequest.onHeadersReceived({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+    const req = pending.get(details.id);
+    pending.delete(details.id);
+    if (!req || !details.responseHeaders) return callback({});
+
+    const h = details.responseHeaders;
+    for (const name of ['Access-Control-Allow-Origin', 'Access-Control-Allow-Credentials',
+      'Access-Control-Allow-Methods', 'Access-Control-Allow-Headers']) header(h, name, true);
+    h['Access-Control-Allow-Origin'] = [APP_ORIGIN];
+    h['Access-Control-Allow-Credentials'] = ['true'];
+    h['Access-Control-Allow-Methods'] = [req.methods || 'GET, POST, PUT, PATCH, DELETE, OPTIONS'];
+    if (req.headers) h['Access-Control-Allow-Headers'] = [req.headers];
+
+    const cookieKey = Object.keys(h).find((k) => k.toLowerCase() === 'set-cookie');
+    if (cookieKey) {
+      const list = [].concat(h[cookieKey]);
+      delete h[cookieKey];
+      h['Set-Cookie'] = list.map((c) => {
+        let v = c.replace(/;\s*SameSite=[^;]*/gi, '') + '; SameSite=None';
+        if (!/;\s*Secure\b/i.test(v)) v += '; Secure';
+        return v;
+      });
+    }
+
+    // Un preflight rechazado por el backend se responde como aceptado.
+    const statusLine =
+      details.method === 'OPTIONS' && details.statusCode >= 400 ? 'HTTP/1.1 204 No Content' : undefined;
+    callback({ responseHeaders: h, ...(statusLine && { statusLine }) });
+  });
 }
 
 function createWindow() {
@@ -75,6 +138,7 @@ if (!app.requestSingleInstanceLock()) {
       if (!file) return new Response('Not found', { status: 404 });
       return net.fetch(pathToFileURL(file).toString());
     });
+    allowBackendRequests(session.defaultSession);
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

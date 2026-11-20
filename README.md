@@ -14,9 +14,68 @@ node dist/cli.js analyze ../mi-proyecto
 node dist/cli.js build ../mi-proyecto -t windows,android -n "Mi App" --id com.miempresa.miapp -i icono.png
 ```
 
-Durante el desarrollo se puede usar `npm run dev -- <comando>` (ejecuta el TypeScript directamente con tsx).
+| Opción | Descripción |
+|---|---|
+| `-t, --target <lista>` | Plataformas separadas por coma: `windows`, `mac`, `linux`, `android`, `ios` |
+| `-n, --name <nombre>` | Nombre visible de la app |
+| `--id <id>` | Identificador único, p. ej. `com.miempresa.miapp` |
+| `--version <x.y.z>` | Versión de la app |
+| `-i, --icon <png>` | Ícono PNG cuadrado (se recomienda 1024×1024) |
+| `-o, --out <carpeta>` | Carpeta de resultados (por defecto `./out/<id>`) |
+| `--verbose` | Muestra toda la salida de los comandos |
 
-Plataformas: `windows`, `mac`, `linux`, `android`, `ios`. Los resultados quedan en `out/<id>/`.
+Durante el desarrollo se puede usar `npm run dev -- <comando>` (ejecuta el TypeScript directamente con tsx). Si se cambia algo en `src/`, hay que volver a correr `npm run build` para que `node dist/cli.js` use la versión nueva.
+
+## Frameworks soportados
+
+| Framework | Estado | Qué se adapta en la copia |
+|---|---|---|
+| Vite + React | ✅ | `--base /`; se omite el chequeo de tipos |
+| Vite + Vue | ✅ | ídem |
+| Vite + Svelte | ✅ | ídem |
+| Vite + Solid | ✅ | ídem |
+| Vite + Preact | ✅ | ídem |
+| Vite + Lit | ✅ | ídem |
+| Create React App | ✅ | `PUBLIC_URL=/` (ignora `homepage`), las advertencias de ESLint no bloquean |
+| Angular | ✅ | `angular.json`: sin SSR/prerender/budgets, `baseHref` `/` |
+| Next.js | ✅ | `next.config` envuelto: `output: 'export'`, imágenes sin optimizar, sin PPR; se quitan rutas de API y middleware |
+| Nuxt | ✅ | `nuxt.config` envuelto: `baseURL` `/`, sin módulos `@vercel/*`; `nuxt generate`. Las rutas no prerenderizadas usan `200.html` |
+| SvelteKit | 🔜 Detectado, pendiente | |
+| Remix / React Router (modo framework) | 🔜 Detectado, pendiente | |
+| Astro | 🔜 Detectado, pendiente | |
+| Gatsby | 🔜 Detectado, pendiente | |
+
+- **Gestores de paquetes**: npm, pnpm, yarn y bun (se detecta por el archivo de lock).
+- **Next.js**: el análisis marca como bloqueantes `getServerSideProps`, Server Actions, `cookies()`/`headers()` y rutas dinámicas sin `generateStaticParams`/`getStaticPaths`.
+- **Lo que no se lleva a la app**: todo lo que corre en un servidor (rutas `server/api` de Nuxt, rutas de API de Next, SSR). La app queda como sitio estático que habla con su backend por HTTP.
+
+## Sistemas operativos
+
+Qué se puede generar según el sistema donde se ejecuta todo2todo:
+
+| Generar → / Desde ↓ | Windows (`.exe`) | Linux (`.AppImage`) | Mac (`.dmg`) | Android (`.apk`) | iOS |
+|---|---|---|---|---|---|
+| **Windows** | ✅ | ⚠️ no garantizado | ❌ | ✅ con Android Studio | Proyecto Xcode |
+| **Linux** | ✅ Wine se instala solo | ✅ | ❌ | ✅ Java y SDK se instalan solos | Proyecto Xcode |
+| **WSL** | ✅ Wine se instala solo | ✅ | ❌ | ✅ Java y SDK se instalan solos | Proyecto Xcode |
+| **macOS** | ⚠️ `.zip` sin Wine | ✅ | ✅ | ✅ con Android Studio | ✅ se compila en Xcode |
+
+### Windows
+
+Funciona directo: genera el instalador `.exe` (NSIS). Para Android hay que instalar Android Studio (o definir `ANDROID_HOME`) y un JDK 21.
+
+### Linux y WSL
+
+todo2todo instala solo lo que falta la primera vez:
+
+- **Instalador de Windows**: electron-builder necesita **Wine** para crear el `.exe` fuera de Windows. Si no está, se instala con el gestor de paquetes del sistema (`apt-get`, `dnf`, `pacman` o `zypper`) usando `sudo`, así que **pide la contraseña**. Si no se puede instalar (sin terminal interactiva, sin `sudo`, etc.), se genera un `.zip` portable de la app en lugar del instalador.
+- **Android**: si no hay Java 21 se descarga a `~/.todo2todo/jdk-21` (solo lo usa todo2todo), y si no hay Android SDK se instala en `~/Android/Sdk` con las licencias aceptadas. No necesita `sudo`. La primera vez descarga varios cientos de MB.
+
+En **WSL** los resultados quedan en el sistema de archivos de Linux; desde Windows se abren en `\\wsl$\<distro>\home\<usuario>\...` o copiándolos a `/mnt/c/...`. Si se ejecuta desde la terminal de VS Code, todo2todo quita `ELECTRON_RUN_AS_NODE`, que haría arrancar Electron como Node.
+
+### macOS
+
+Es el único sistema que genera la app de Mac (`.dmg`) y compila iOS. Para el instalador de Windows hay que instalar Wine a mano (`brew install --cask wine-stable`); si no, se genera un `.zip` portable.
 
 ## Cómo funciona
 
@@ -24,27 +83,24 @@ Plataformas: `windows`, `mac`, `linux`, `android`, `ios`. Los resultados quedan 
 detectar → copiar a .work/source → compilar web → empaquetar
 ```
 
-1. **Análisis** ([src/pipeline.ts](src/pipeline.ts), [src/project.ts](src/project.ts)): detecta el framework, revisa problemas (p.ej. URLs a `localhost`) y los explica en lenguaje simple.
+1. **Análisis** ([src/pipeline.ts](src/pipeline.ts), [src/project.ts](src/project.ts)): detecta el framework, revisa problemas (p. ej. URLs a `localhost` o login con proveedores externos) y los explica en lenguaje simple.
 2. **Adaptador** ([src/adapters/](src/adapters/)): uno por framework. Instala dependencias y compila a un sitio estático. Se registran en [src/adapters/index.ts](src/adapters/index.ts).
 3. **Destinos** ([src/targets/](src/targets/)):
    - **Escritorio**: plantilla Electron ([templates/electron/](templates/electron/)) que sirve la app por el protocolo `app://`, de modo que las rutas absolutas y el router en modo history funcionan sin tocar el proyecto. Instaladores con electron-builder.
-   - **Móvil**: proyecto Capacitor. Compila el APK si encuentra el Android SDK; iOS genera el proyecto Xcode (compilar requiere macOS). En Android se reemplaza `MainActivity` ([templates/android/MainActivity.java](templates/android/MainActivity.java)) para que los sitios multipágina sirvan `/acerca` desde `acerca.html`, ya que Capacitor responde `index.html` a toda ruta sin extensión.
+   - **Móvil**: proyecto Capacitor. En Android se reemplaza `MainActivity` ([templates/android/MainActivity.java](templates/android/MainActivity.java)) para que los sitios multipágina sirvan `/acerca` desde `acerca.html`, ya que Capacitor responde `index.html` a toda ruta sin extensión. iOS genera el proyecto Xcode.
 
-## Compatibilidad actual
+## Conexión con el backend (CORS y cookies de sesión)
 
-| Framework | Estado | Qué se adapta en la copia |
-|---|---|---|
-| Vite (React, Vue, Svelte, Solid, Preact, Lit) | ✅ | `--base /`; se omite el chequeo de tipos |
-| Create React App | ✅ | `PUBLIC_URL=/` (ignora `homepage`), advertencias de ESLint no bloquean |
-| Angular | ✅ | `angular.json`: sin SSR/prerender/budgets, `baseHref` `/` |
-| Next.js | ✅ | `next.config` envuelto: `output: 'export'`, imágenes sin optimizar, sin PPR; se quitan rutas de API y middleware |
-| Nuxt | ✅ | `nuxt.config` envuelto: `baseURL` `/`, sin módulos `@vercel/*`; `nuxt generate`. Las rutas no prerenderizadas usan `200.html` |
-| SvelteKit, Remix, Astro, Gatsby | Detectado, pendiente | |
+Dentro de la app, la web ya no corre en su dominio sino en `app://bundle` (escritorio) o `https://localhost` (Android). Para el backend es otro sitio: el navegador bloquea las respuestas por CORS y no envía las cookies de sesión (`SameSite`). todo2todo lo resuelve sin tocar el backend:
 
-Next.js: el análisis marca como bloqueantes `getServerSideProps`, Server Actions, `cookies()`/`headers()` y rutas dinámicas sin `generateStaticParams`/`getStaticPaths`.
+- **Escritorio**: el proceso principal de Electron agrega a las respuestas los encabezados CORS que permiten `app://bundle` con credenciales, acepta los preflight (`OPTIONS`) y guarda las cookies como `SameSite=None; Secure` (siguen siendo HttpOnly).
+- **Android**: si el JS compilado usa `credentials: 'include'` o `withCredentials` (sesión por cookie), se activan `CapacitorHttp` y `CapacitorCookies`: las peticiones a otros dominios salen desde Android, sin CORS y con las cookies del backend (incluidas las HttpOnly).
 
-## Requisitos para compilar
+WebSockets (p. ej. Laravel Reverb) no pasan por esto: el servidor debe aceptar cualquier origen o incluir los de la app.
+
+## Requisitos
 
 - Node 20+
-- Android: Android Studio / Android SDK (`ANDROID_HOME`) y JDK 21
+- Android: Android SDK y JDK 21 (en Linux/WSL se instalan solos; en Windows/macOS, Android Studio)
+- Instalador de Windows fuera de Windows: Wine (en Linux/WSL se instala solo)
 - Mac e iOS: macOS con Xcode
