@@ -1,4 +1,4 @@
-# todo2todo
+# haruplatforms
 
 Convierte un proyecto web JavaScript en una app de escritorio (Electron) o móvil (Capacitor), sin modificar el código original.
 
@@ -56,7 +56,7 @@ Durante el desarrollo se puede usar `npm run dev -- <comando>` (ejecuta el TypeS
 
 ## Sistemas operativos
 
-Qué se puede generar según el sistema donde se ejecuta todo2todo:
+Qué se puede generar según el sistema donde se ejecuta haruplatforms:
 
 | Generar → / Desde ↓ | Windows (`.exe`) | Linux (`.AppImage`) | Mac (`.dmg`) | Android (`.apk`) | iOS |
 |---|---|---|---|---|---|
@@ -71,12 +71,12 @@ Funciona directo: genera el instalador `.exe` (NSIS). Para Android hay que insta
 
 ### Linux y WSL
 
-todo2todo instala solo lo que falta la primera vez:
+haruplatforms instala solo lo que falta la primera vez:
 
 - **Instalador de Windows**: electron-builder necesita **Wine** para crear el `.exe` fuera de Windows. Si no está, se instala con el gestor de paquetes del sistema (`apt-get`, `dnf`, `pacman` o `zypper`) usando `sudo`, así que **pide la contraseña**. Si no se puede instalar (sin terminal interactiva, sin `sudo`, etc.), se genera un `.zip` portable de la app en lugar del instalador.
-- **Android**: si no hay Java 21 se descarga a `~/.todo2todo/jdk-21` (solo lo usa todo2todo), y si no hay Android SDK se instala en `~/Android/Sdk` con las licencias aceptadas. No necesita `sudo`. La primera vez descarga varios cientos de MB.
+- **Android**: si no hay Java 21 se descarga a `~/.todo2todo/jdk-21` (solo lo usa haruplatforms), y si no hay Android SDK se instala en `~/Android/Sdk` con las licencias aceptadas. No necesita `sudo`. La primera vez descarga varios cientos de MB.
 
-En **WSL** los resultados quedan en el sistema de archivos de Linux; desde Windows se abren en `\\wsl$\<distro>\home\<usuario>\...` o copiándolos a `/mnt/c/...`. Si se ejecuta desde la terminal de VS Code, todo2todo quita `ELECTRON_RUN_AS_NODE`, que haría arrancar Electron como Node.
+En **WSL** los resultados quedan en el sistema de archivos de Linux; desde Windows se abren en `\\wsl$\<distro>\home\<usuario>\...` o copiándolos a `/mnt/c/...`. Si se ejecuta desde la terminal de VS Code, haruplatforms quita `ELECTRON_RUN_AS_NODE`, que haría arrancar Electron como Node.
 
 ### macOS
 
@@ -102,20 +102,20 @@ Cada framework tiene un caso de uso en [examples/](examples/) con el mismo recor
 [scripts/probar-app.mjs](scripts/probar-app.mjs) abre la app generada, recorre ese caso por el protocolo de depuración de Chromium y revisa la consola:
 
 ```bash
-node dist/cli.js build examples/sveltekit-demo -t windows,android -n "SvelteKit Demo" --id com.todo2todo.sveltekitdemo
+node dist/cli.js build examples/sveltekit-demo -t windows,android -n "SvelteKit Demo" --id com.haruplatforms.sveltekitdemo
 
 # Escritorio (la carpeta sin instalar que deja electron-builder)
-node scripts/probar-app.mjs electron "out/com.todo2todo.sveltekitdemo/.work/electron/release/win-unpacked/SvelteKit Demo.exe"
+node scripts/probar-app.mjs electron "out/com.haruplatforms.sveltekitdemo/.work/electron/release/win-unpacked/SvelteKit Demo.exe"
 
 # Android (con un emulador abierto o un equipo conectado)
-node scripts/probar-app.mjs android "out/com.todo2todo.sveltekitdemo/SvelteKit Demo-1.0.0-android-debug.apk" com.todo2todo.sveltekitdemo
+node scripts/probar-app.mjs android "out/com.haruplatforms.sveltekitdemo/SvelteKit Demo-1.0.0-android-debug.apk" com.haruplatforms.sveltekitdemo
 ```
 
 Para sitios sin router de cliente (Astro) se agrega `--sin-router`: `/productos/99` debe mostrar la página 404 del sitio.
 
 ## Conexión con el backend (CORS y cookies de sesión)
 
-Dentro de la app, la web ya no corre en su dominio sino en `app://bundle` (escritorio) o `https://localhost` (Android). Para el backend es otro sitio: el navegador bloquea las respuestas por CORS y no envía las cookies de sesión (`SameSite`). todo2todo lo resuelve sin tocar el backend:
+Dentro de la app, la web ya no corre en su dominio sino en `app://bundle` (escritorio) o `https://localhost` (Android). Para el backend es otro sitio: el navegador bloquea las respuestas por CORS y no envía las cookies de sesión (`SameSite`). haruplatforms lo resuelve sin tocar el backend:
 
 - **Escritorio**: el proceso principal de Electron agrega a las respuestas los encabezados CORS que permiten `app://bundle` con credenciales, acepta los preflight (`OPTIONS`) y guarda las cookies como `SameSite=None; Secure` (siguen siendo HttpOnly).
 - **Android**: si el JS compilado usa `credentials: 'include'` o `withCredentials` (sesión por cookie), se activan `CapacitorHttp` y `CapacitorCookies`: las peticiones a otros dominios salen desde Android, sin CORS y con las cookies del backend (incluidas las HttpOnly).
