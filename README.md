@@ -40,12 +40,17 @@ Durante el desarrollo se puede usar `npm run dev -- <comando>` (ejecuta el TypeS
 | Angular | ✅ | `angular.json`: sin SSR/prerender/budgets, `baseHref` `/` |
 | Next.js | ✅ | `next.config` envuelto: `output: 'export'`, imágenes sin optimizar, sin PPR; se quitan rutas de API y middleware |
 | Nuxt | ✅ | `nuxt.config` envuelto: `baseURL` `/`, sin módulos `@vercel/*`; `nuxt generate`. Las rutas no prerenderizadas usan `200.html` |
-| SvelteKit | 🔜 Detectado, pendiente | |
-| Remix / React Router (modo framework) | 🔜 Detectado, pendiente | |
-| Astro | 🔜 Detectado, pendiente | |
-| Gatsby | 🔜 Detectado, pendiente | |
+| SvelteKit | ✅ | `svelte.config` envuelto: `adapter-static` (versión acorde a Kit) con `200.html`, `paths.base` vacío, `prerender = 'auto'` en el layout raíz |
+| React Router 7 (modo framework) | ✅ | `react-router.config` envuelto: `ssr: false`, `prerender` de rutas sin parámetros, `basename` `/`; Vite con `base` `/` |
+| Astro | ✅ | `astro.config` envuelto: `output: 'static'`, sin adaptador, `base` `/`; se quitan páginas con `prerender = false`; su 404 queda como `200.html` |
+| Gatsby | ✅ | `gatsby build` sin `--prefix-paths` (ignora `pathPrefix`); las rutas de solo cliente se sirven con su propia página |
+| Remix 2 | 🔜 Detectado, pendiente | Se sugiere actualizar a React Router 7 (`npx codemod remix/2/react-router/upgrade`) |
 
 - **Gestores de paquetes**: npm, pnpm, yarn y bun (se detecta por el archivo de lock).
+- **SvelteKit**: el análisis marca como bloqueantes las form actions y avisa de rutas `+server`, `hooks.server` y rutas dinámicas que cargan datos en el servidor.
+- **React Router 7**: bloquean las `action` y los `loader` en rutas con parámetros (se sugiere `clientLoader`).
+- **Astro**: bloquean las rutas dinámicas sin `getStaticPaths` y las server islands (`server:defer`).
+- **Gatsby**: bloquea `getServerData`; avisa de páginas DSG y de Gatsby Functions (`src/api`).
 - **Next.js**: el análisis marca como bloqueantes `getServerSideProps`, Server Actions, `cookies()`/`headers()` y rutas dinámicas sin `generateStaticParams`/`getStaticPaths`.
 - **Lo que no se lleva a la app**: todo lo que corre en un servidor (rutas `server/api` de Nuxt, rutas de API de Next, SSR). La app queda como sitio estático que habla con su backend por HTTP.
 
@@ -87,7 +92,26 @@ detectar → copiar a .work/source → compilar web → empaquetar
 2. **Adaptador** ([src/adapters/](src/adapters/)): uno por framework. Instala dependencias y compila a un sitio estático. Se registran en [src/adapters/index.ts](src/adapters/index.ts).
 3. **Destinos** ([src/targets/](src/targets/)):
    - **Escritorio**: plantilla Electron ([templates/electron/](templates/electron/)) que sirve la app por el protocolo `app://`, de modo que las rutas absolutas y el router en modo history funcionan sin tocar el proyecto. Instaladores con electron-builder.
+   - Rutas de solo cliente: si el adaptador deja un `todo2todo-routes.json` (patrón de URL → página), Electron y Android sirven esa página para las URL que coinciden antes de recurrir a `200.html`. Lo usa Gatsby para `/productos/:id` → `productos/[id]/index.html`.
    - **Móvil**: proyecto Capacitor. En Android se reemplaza `MainActivity` ([templates/android/MainActivity.java](templates/android/MainActivity.java)) para que los sitios multipágina sirvan `/acerca` desde `acerca.html`, ya que Capacitor responde `index.html` a toda ruta sin extensión. iOS genera el proyecto Xcode.
+
+## Pruebas
+
+Cada framework tiene un caso de uso en [examples/](examples/) con el mismo recorrido: inicio con datos de una API de servidor (guardados al compilar), `/acerca`, una ruta dinámica generada (`/productos/1`) y otra que no (`/productos/99`), además de algo que solo corre en un servidor y debe quedar fuera de la app.
+
+[scripts/probar-app.mjs](scripts/probar-app.mjs) abre la app generada, recorre ese caso por el protocolo de depuración de Chromium y revisa la consola:
+
+```bash
+node dist/cli.js build examples/sveltekit-demo -t windows,android -n "SvelteKit Demo" --id com.todo2todo.sveltekitdemo
+
+# Escritorio (la carpeta sin instalar que deja electron-builder)
+node scripts/probar-app.mjs electron "out/com.todo2todo.sveltekitdemo/.work/electron/release/win-unpacked/SvelteKit Demo.exe"
+
+# Android (con un emulador abierto o un equipo conectado)
+node scripts/probar-app.mjs android "out/com.todo2todo.sveltekitdemo/SvelteKit Demo-1.0.0-android-debug.apk" com.todo2todo.sveltekitdemo
+```
+
+Para sitios sin router de cliente (Astro) se agrega `--sin-router`: `/productos/99` debe mostrar la página 404 del sitio.
 
 ## Conexión con el backend (CORS y cookies de sesión)
 

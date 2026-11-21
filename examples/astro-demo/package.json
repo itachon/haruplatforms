@@ -1,0 +1,13 @@
+{
+  "name": "astro-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.2.0",
+    "astro": "^5.8.0"
+  }
+}

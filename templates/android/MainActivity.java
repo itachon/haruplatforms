@@ -7,8 +7,16 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Generado por todo2todo.
@@ -42,10 +50,39 @@ public class MainActivity extends BridgeActivity {
             return null;
         }
         String base = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
-        for (String candidate : new String[] { base + ".html", base + "/index.html", "/200.html" }) {
+        for (String candidate : new String[] { base + ".html", base + "/index.html" }) {
             if (assetExists("public" + candidate)) return candidate;
         }
-        return null;
+        for (String[] route : clientRoutes()) {
+            if (Pattern.compile(route[0]).matcher(path).find() && assetExists("public/" + route[1])) {
+                return "/" + route[1];
+            }
+        }
+        return assetExists("public/200.html") ? "/200.html" : null;
+    }
+
+    private List<String[]> routes;
+
+    /**
+     * Rutas de solo cliente con su propia página (p.ej. Gatsby: /productos/:id →
+     * productos/[id]/index.html). Las escribe el adaptador al compilar.
+     */
+    private List<String[]> clientRoutes() {
+        if (routes != null) return routes;
+        routes = new ArrayList<>();
+        try (InputStream in = getAssets().open("public/todo2todo-routes.json")) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            for (int n; (n = in.read(buffer)) > 0; ) out.write(buffer, 0, n);
+            JSONArray list = new JSONArray(out.toString("UTF-8"));
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject r = list.getJSONObject(i);
+                routes.add(new String[] { r.getString("pattern"), r.getString("file") });
+            }
+        } catch (IOException | JSONException e) {
+            // Sin archivo de rutas: solo se usa 200.html.
+        }
+        return routes;
     }
 
     private boolean assetExists(String asset) {

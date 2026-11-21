@@ -13,6 +13,17 @@ const WEB_ROOT = path.join(__dirname, 'web');
 // su index.html es la página de inicio ya renderizada.
 const SPA_FALLBACK = ['200.html', 'index.html'].map((f) => path.join(WEB_ROOT, f)).find((f) => fs.existsSync(f));
 
+// Rutas de solo cliente con su propia página (p.ej. Gatsby: /productos/:id →
+// productos/[id]/index.html). Las escribe el adaptador al compilar.
+const CLIENT_ROUTES = (() => {
+  try {
+    const routes = JSON.parse(fs.readFileSync(path.join(WEB_ROOT, 'todo2todo-routes.json'), 'utf8'));
+    return routes.map((r) => ({ pattern: new RegExp(r.pattern), file: path.join(WEB_ROOT, r.file) }));
+  } catch {
+    return [];
+  }
+})();
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: SCHEME,
@@ -32,6 +43,8 @@ function resolveFile(pathname) {
     if (isFile(candidate)) return candidate;
   }
   // Si no, es una ruta del router del cliente (SPA).
+  const route = CLIENT_ROUTES.find((r) => r.pattern.test(pathname));
+  if (route && isFile(route.file)) return route.file;
   return SPA_FALLBACK;
 }
 

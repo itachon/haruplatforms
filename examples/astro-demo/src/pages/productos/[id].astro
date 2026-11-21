@@ -1,0 +1,10 @@
+---
+export const prerender = true;
+import Base from '../../layouts/Base.astro';
+
+export function getStaticPaths() {
+  return ['1', '2', '3'].map((id) => ({ params: { id } }));
+}
+const { id } = Astro.params;
+---
+<Base><h1>Producto {id}</h1></Base>

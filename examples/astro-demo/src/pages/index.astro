@@ -1,0 +1,18 @@
+---
+export const prerender = true;
+import Base from '../layouts/Base.astro';
+import { saludo } from '../lib/saludo';
+const { hola } = saludo();
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<Base>
+  <h1>Inicio (Astro)</h1>
+  <p id="api">API: {hola}</p>
+  <a href={`${base}/productos/1`}>Producto 1</a>
+  <button id="ir-99">Producto 99</button>
+  <script>
+    document.getElementById('ir-99')!.addEventListener('click', () => {
+      location.href = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/productos/99`;
+    });
+  </script>
+</Base>

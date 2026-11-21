@@ -26,7 +26,7 @@ export function analyze(root: string): Analysis {
     findings.push({
       level: 'error',
       message: `Detectamos ${detection.label}, que todavía no es compatible.`,
-      hint: `Estamos trabajando en ello. ${SUPPORTED_SUMMARY}`,
+      hint: detection.hint,
     });
   } else {
     findings.push({

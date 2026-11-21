@@ -1,0 +1,6 @@
+---
+// Se genera en el servidor en cada visita: no puede ir dentro de la app.
+export const prerender = false;
+import Base from '../layouts/Base.astro';
+---
+<Base><h1>Hora del servidor: {new Date().toISOString()}</h1></Base>
